@@ -1,0 +1,165 @@
+#!/usr/bin/env python
+'''
+Fade.
+'''
+import argparse
+import numpy as np
+import scipy.interpolate as interp
+import time
+
+import opc
+
+
+NUM_STRIPS = 4
+NUM_LEDS = (60, 60, 60, 60)
+
+TOTAL_LEDS = sum(NUM_LEDS)
+EMPTY_CHANNEL = np.array([0] * TOTAL_LEDS)
+BLACK = [(0, 0, 0)] * TOTAL_LEDS
+WHITE = [(255, 255, 255)] * TOTAL_LEDS
+PRINT_LIGHT_ON = [(255, 255, 255)] * NUM_LEDS[1]
+
+VALID_CMDS = ['off', 'on', 'test', 'rainbow', 'print']
+
+
+def design_test(client):
+    '''
+    Main design test, show all the functions sequentially.
+    '''
+    off(client)
+    time.sleep(1)
+    on(client)
+    time.sleep(1)
+    print3d(client, 10)
+    time.sleep(1)
+    rainbow(client, 10)
+    time.sleep(1)
+
+
+# Visual utilities
+##################
+def off(client):
+    client.put_pixels(BLACK)
+
+
+def on(client):
+    client.put_pixels(BLACK)
+    client.put_pixels(BLACK)
+    time.sleep(0.5)
+    client.put_pixels(WHITE)
+
+
+def rainbow(client, timeout=None):
+    FRAMERATE = 0.6
+    WHEEL = [
+        (255, 0, 0),
+        (255, 127, 0),
+        (255, 255, 0),
+        (0, 255, 0),
+        (0, 0, 255),
+        (75, 0, 130),
+        (148, 0, 211),
+        ]
+    buf = resize(WHEEL, EMPTY_CHANNEL.size)
+    index = 0
+    while True:
+        buf = buf[index:] + buf[:index]
+        client.put_pixels(buf)
+        time.sleep(FRAMERATE)
+        index += 1
+        if index % TOTAL_LEDS == 0:
+            index = 0
+
+
+def print3d(client, timeout=None):
+    FRAMERATE = 1.2
+    WHEEL = [
+        (255, 72, 196),
+        (43, 209, 252),
+        (243, 234, 95),
+        (192, 77, 249),
+        (255, 63, 63),
+        ]
+    buf = resize(WHEEL, EMPTY_CHANNEL.size)
+    index = 0
+    while True:
+        buf = buf[index:] + buf[:index]
+        out = buf[0:NUM_LEDS[0]] + PRINT_LIGHT_ON
+        client.put_pixels(out)
+        time.sleep(FRAMERATE)
+        index += 1
+        if index % TOTAL_LEDS == 0:
+            index = 0
+
+
+# Utilities
+###########
+def resize(in_pattern, out_size):
+    rs = np.array([x for (x, y, z) in in_pattern])
+    gs = np.array([y for (x, y, z) in in_pattern])
+    bs = np.array([z for (x, y, z) in in_pattern])
+    r_interp = interp.interp1d(np.arange(rs.size), rs)
+    r_stretch = r_interp(np.linspace(0, rs.size-1, out_size))
+    g_interp = interp.interp1d(np.arange(gs.size), gs)
+    g_stretch = g_interp(np.linspace(0, gs.size-1, out_size))
+    b_interp = interp.interp1d(np.arange(bs.size), bs)
+    b_stretch = b_interp(np.linspace(0, bs.size-1, out_size))
+    rgb = np.array([
+        r_stretch.astype(int),
+        g_stretch.astype(int),
+        b_stretch.astype(int)])
+    buf = rgb.T
+    buf = [list(s) for s in buf]
+    return list(buf)
+
+
+def get_client(server_addr, port):
+    return opc.Client('{}:{}'.format(server_addr, port))
+
+
+def get_args():
+    parser = argparse.ArgumentParser(description='fadecanvas helper utility')
+    # Configuration
+    parser.add_argument('--host', type=str, default='localhost',
+                        help='host to connect to for fcserver')
+    parser.add_argument('--port', type=int, default=7890,
+                        help='host to connect to for fcserver')
+    # Utilities
+    parser.add_argument('cmds', nargs=argparse.REMAINDER)
+    return parser.parse_args()
+
+
+def parse_cmd(cmd, client):
+    if cmd == "off":
+        off(client)
+    elif cmd == "on":
+        on(client)
+    elif cmd == "test":
+        design_test(client)
+    elif cmd == "rainbow":
+        rainbow(client)
+    elif cmd == "print":
+        print3d(client)
+    else:
+        print("Unknown command: {}".format(cmd))
+        print("Valid commands: {}".format(VALID_CMDS))
+
+
+# Application entry
+###################
+def main(args):
+    # num_strips = args.strips
+    # num_leds = args.num_leds
+    # print("{} strips, {} LEDs".format(num_strips, num_leds))
+    try:
+        client = get_client(args.host, args.port)
+        print("fade => {} @ {}".format(args.host, args.port))
+        for cmd in args.cmds:
+            parse_cmd(cmd, client)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        off(client)
+
+
+if __name__ == "__main__":
+    main(get_args())

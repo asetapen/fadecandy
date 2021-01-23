@@ -4,7 +4,7 @@
 
 import opc, time
 
-numPairs = 256
+numPairs = 120
 client = opc.Client('localhost:7890')
 
 black = [ (0,0,0), (0,0,0) ] * numPairs
