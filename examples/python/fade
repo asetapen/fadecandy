@@ -9,48 +9,98 @@ import time
 
 import opc
 
+# Default configs for this host
+DEFAULT_CLIENT = 'desk'
+DEFAULT_CONFIG = 'desk'
+DEFAULT_PORT = 7890
 
-NUM_STRIPS = 4
-NUM_LEDS = (60, 60, 60, 60)
+VALID_CONFIGS = {
+    'desk': {
+        'num_strips': 4,
+        'strip_lengths': tuple([60] * 4),
+    },
+    'printrbot': {
+        'num_strips': 3,
+        'strip_lengths': (27, 22, 60),
+    },
+    'default': {
+        'num_strips': 8,
+        'strip_lengths': tuple([64] * 8),
+    }
+}
 
-TOTAL_LEDS = sum(NUM_LEDS)
-EMPTY_CHANNEL = np.array([0] * TOTAL_LEDS)
-BLACK = [(0, 0, 0)] * TOTAL_LEDS
-WHITE = [(255, 255, 255)] * TOTAL_LEDS
-PRINT_LIGHT_ON = [(255, 255, 255)] * NUM_LEDS[1]
 
-VALID_CMDS = ['off', 'on', 'test', 'rainbow', 'print']
+def num_leds(config):
+    return sum(config['strip_lengths'])
 
 
-def design_test(client):
+def strip_lengths(config):
+    return config['strip_lengths']
+
+
+def black(config):
+    return [(0, 0, 0)] * num_leds(config)
+
+
+def white(config):
+    return [(255, 255, 255)] * num_leds(config)
+
+
+def empty_channel(config):
+    return np.array([0] * num_leds(config))
+
+
+VALID_CMDS = [
+    'off',
+    'on',
+    'test',
+    'rainbow',
+    'print',
+]
+
+
+def design_test(client, config):
     '''
     Main design test, show all the functions sequentially.
     '''
-    off(client)
+    off(client, config)
     time.sleep(1)
-    on(client)
+    on(client, config)
     time.sleep(1)
-    print3d(client, 10)
+    print3d(client, config, 10)
     time.sleep(1)
-    rainbow(client, 10)
+    rainbow(client, config, 10)
     time.sleep(1)
 
 
 # Visual utilities
 ##################
-def off(client):
-    client.put_pixels(BLACK)
+def off(client, config):
+    print("off")
+    client.put_pixels(black(config))
 
 
-def on(client):
-    client.put_pixels(BLACK)
-    client.put_pixels(BLACK)
+def on(client, config):
+    print("on")
+    client.put_pixels(black(config))
+    client.put_pixels(black(config))
     time.sleep(0.5)
-    client.put_pixels(WHITE)
+    client.put_pixels(white(config))
 
 
-def rainbow(client, timeout=None):
-    FRAMERATE = 0.6
+def cycle(client, config, framerate, buffer):
+    index = 0
+    while True:
+        buf = buffer[index:] + buffer[:index]
+        client.put_pixels(buf)
+        time.sleep(framerate)
+        index += 1
+        if index % num_leds(config) == 0:
+            index = 0
+
+
+def rainbow(client, config, timeout=None):
+    print("rainbow")
     WHEEL = [
         (255, 0, 0),
         (255, 127, 0),
@@ -59,19 +109,16 @@ def rainbow(client, timeout=None):
         (0, 0, 255),
         (75, 0, 130),
         (148, 0, 211),
+        (255, 0, 0),
         ]
-    buf = resize(WHEEL, EMPTY_CHANNEL.size)
-    index = 0
-    while True:
-        buf = buf[index:] + buf[:index]
-        client.put_pixels(buf)
-        time.sleep(FRAMERATE)
-        index += 1
-        if index % TOTAL_LEDS == 0:
-            index = 0
+    buf = resize(WHEEL, empty_channel(config).size)
+    cycle(client, config, 0.6, buf)
 
 
-def print3d(client, timeout=None):
+def print3d(client, config, timeout=None):
+    print("print3d")
+    PRINT_LIGHT_ON = [(255, 255, 255)] * strip_lengths(config)[1]
+
     FRAMERATE = 1.2
     WHEEL = [
         (255, 72, 196),
@@ -80,15 +127,15 @@ def print3d(client, timeout=None):
         (192, 77, 249),
         (255, 63, 63),
         ]
-    buf = resize(WHEEL, EMPTY_CHANNEL.size)
+    buf = resize(WHEEL, empty_channel(config).size)
     index = 0
     while True:
         buf = buf[index:] + buf[:index]
-        out = buf[0:NUM_LEDS[0]] + PRINT_LIGHT_ON
+        out = buf[0:strip_lengths(config)[0]] + PRINT_LIGHT_ON
         client.put_pixels(out)
         time.sleep(FRAMERATE)
         index += 1
-        if index % TOTAL_LEDS == 0:
+        if index % num_leds(config) == 0:
             index = 0
 
 
@@ -120,29 +167,39 @@ def get_client(server_addr, port):
 def get_args():
     parser = argparse.ArgumentParser(description='fadecanvas helper utility')
     # Configuration
-    parser.add_argument('--host', type=str, default='localhost',
-                        help='host to connect to for fcserver')
-    parser.add_argument('--port', type=int, default=7890,
-                        help='host to connect to for fcserver')
+    parser.add_argument('-c', type=str, default=DEFAULT_CLIENT,
+                        help='client to connect to for fcserver')
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT,
+                        help='port to connect to for fcserver')
     # Utilities
     parser.add_argument('cmds', nargs=argparse.REMAINDER)
     return parser.parse_args()
 
 
-def parse_cmd(cmd, client):
+def parse_cmd(cmd, client, config):
     if cmd == "off":
-        off(client)
+        off(client, config)
     elif cmd == "on":
-        on(client)
+        on(client, config)
     elif cmd == "test":
-        design_test(client)
+        design_test(client, config)
     elif cmd == "rainbow":
-        rainbow(client)
+        rainbow(client, config)
     elif cmd == "print":
-        print3d(client)
+        print3d(client, config)
     else:
         print("Unknown command: {}".format(cmd))
         print("Valid commands: {}".format(VALID_CMDS))
+
+
+def get_config(client):
+    client_name = DEFAULT_CONFIG
+    if client in VALID_CONFIGS:
+        print("config is {}".format(client))
+        client_name = client
+    else:
+        print("using default config")
+    return VALID_CONFIGS[client_name]
 
 
 # Application entry
@@ -152,13 +209,18 @@ def main(args):
     # num_leds = args.num_leds
     # print("{} strips, {} LEDs".format(num_strips, num_leds))
     try:
-        client = get_client(args.host, args.port)
-        print("fade => {} @ {}".format(args.host, args.port))
+        if args.c == 'localhost':
+            client_host = args.c
+        elif not args.c.endswith('.local'):
+            client_host = args.c + '.local'
+        client = get_client(client_host, args.port)
+        config = get_config(args.c)
+        print("fade => {} @ {}".format(client_host, args.port))
         for cmd in args.cmds:
-            parse_cmd(cmd, client)
+            parse_cmd(cmd, client, config)
             time.sleep(1)
     except KeyboardInterrupt:
-        off(client)
+        off(client, config)
 
 
 if __name__ == "__main__":

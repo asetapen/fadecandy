@@ -17,12 +17,12 @@ bits = ( (80,0,0), (0,255,0) )
 while True:
 	# Flash each strip in turn
 	for strip in range(4):
-		pixels = [ (90,90,90) ] * 512
+		pixels = [ (90,90,90) ] * 240
 		for i in range(32):
 			pixels[strip * 64 + i * 2] = (200,200,200)
 
 		# Label all strips always
-		for s in range(8):
+		for s in range(4):
 			pixels[s * 64 + 0] = bits[(s >> 2) & 1]
 			pixels[s * 64 + 1] = bits[(s >> 1) & 1]
 			pixels[s * 64 + 2] = bits[(s >> 0) & 1]

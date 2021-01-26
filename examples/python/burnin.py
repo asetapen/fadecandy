@@ -5,7 +5,7 @@
 
 import opc, time, math
 
-numLEDs = 512
+numLEDs = 240
 client = opc.Client('localhost:7890')
 
 t = 0
@@ -15,4 +15,4 @@ while True:
     brightness = int(min(1, 1.25 + math.sin(t)) * 255)
     frame = [ (brightness, brightness, brightness) ] * numLEDs
     client.put_pixels(frame)
-    time.sleep(0.05) 
+    time.sleep(0.05)

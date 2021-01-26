@@ -8,10 +8,10 @@ float dx, dy, dz;
 void setup()
 {
   int zoom = 4;
-  size(32*zoom, 16*zoom);
+  size(128, 64);
 
   // Connect to the local instance of fcserver. You can change this line to connect to another computer's fcserver
-  opc = new OPC(this, "127.0.0.1", 7890);
+  opc = new OPC(this, "desk.local", 7890);
 
   opc.ledGrid8x8(0 * 64, width * 1/8, height * 1/4, height/16, 0, true, false);
   opc.ledGrid8x8(1 * 64, width * 3/8, height * 1/4, height/16, 0, true, false);
@@ -83,4 +83,3 @@ void draw() {
   }
   updatePixels();
 }
-
